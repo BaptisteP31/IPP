@@ -64,7 +64,21 @@ def fetch_ics(config, section):
     if not ics_response.content.lstrip().startswith(b'BEGIN:VCALENDAR'):
         raise ValueError('response is not an ICS file (login failed?)')
 
-    return ics_response.content
+    return normalize_ics(ics_response.content)
+
+
+def normalize_ics(raw):
+    """Return the ICS as UTF-8 with CRLF line endings, as RFC 5545 requires.
+
+    webdbf sends Latin-1 while declaring charset=utf-8, so accents break in every client.
+    It also mixes LF and CRLF line endings.
+    """
+    try:
+        text = raw.decode('utf-8')  # In case webdbf fixes its encoding one day.
+    except UnicodeDecodeError:
+        text = raw.decode('cp1252', errors='replace')  # Superset of Latin-1 (adds ’, €, œ...).
+    text = text.replace('\r\n', '\n').replace('\n', '\r\n')
+    return text.encode('utf-8')
 
 
 def refresh_all(config):
