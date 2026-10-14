@@ -37,15 +37,16 @@ L'URL à donner est `https://<votre-domaine>/<jeton>/<section>`. Un jeton inconn
 
 La méthode de déploiement recommandée pour IPP est docker et un reverse proxy. Le code est copié dans l'image. Seules les données sont montées depuis l'hôte : `config.ini` (lecture seule), `tokens.ini` et le dossier `cache/`.
 
-Avant le premier lancement, créez `tokens.ini` et `cache/`. Sinon, Docker crée des dossiers appartenant à root à leur place.
+Avant le premier lancement, créez `tokens.ini`. Sinon, Docker crée un dossier à sa place et le conteneur refuse de démarrer.
 
 ```bash
 touch tokens.ini
-mkdir -p cache
 docker compose up -d --build
 ```
 
-Le conteneur tourne avec l'UID et le GID 1000. Si votre utilisateur a d'autres identifiants, lancez `UID=$(id -u) GID=$(id -g) docker compose up -d --build`.
+Le conteneur démarre en root. Son script d'entrée (`entrypoint.sh`) donne `cache/` et `tokens.ini` à l'utilisateur `PUID:PGID` (1000:1000 par défaut), puis lance l'application avec cet utilisateur. L'application ne tourne jamais en root. Si votre utilisateur a d'autres identifiants, lancez `PUID=$(id -u) PGID=$(id -g) docker compose up -d --build`.
+
+Sur un hôte avec SELinux (Fedora, RHEL…), ajoutez `:z` à chaque montage dans `compose.yml`.
 
 Après une modification du code, reconstruisez l'image avec `docker compose up -d --build`.
 

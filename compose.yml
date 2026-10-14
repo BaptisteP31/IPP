@@ -3,8 +3,10 @@ services:
     build: .
     ports:
       - "5000:5000"
-    # Run as the host user so files created in cache/ and tokens.ini stay editable on the host.
-    user: "${UID:-1000}:${GID:-1000}"
+    environment:
+      # Host user that owns cache/ and tokens.ini. The entrypoint fixes ownership, then runs the app as this user.
+      PUID: "${PUID:-1000}"
+      PGID: "${PGID:-1000}"
     volumes:
       - ./config.ini:/app/config.ini:ro
       - ./tokens.ini:/app/tokens.ini
