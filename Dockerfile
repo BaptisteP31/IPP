@@ -2,7 +2,13 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
+# The container runs as a host UID with no home directory; gunicorn needs a writable one.
+ENV HOME=/tmp
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "main:app"]
+COPY main.py tokens.py ./
+
+# One worker only: the refresh thread must run exactly once.
+CMD ["gunicorn", "--workers", "1", "--threads", "4", "--bind", "0.0.0.0:5000", "main:app"]

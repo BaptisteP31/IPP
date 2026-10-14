@@ -3,8 +3,10 @@ services:
     build: .
     ports:
       - "5000:5000"
+    # Run as the host user so files created in cache/ and tokens.ini stay editable on the host.
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      - .:/app
-    environment:
-      - FLASK_ENV=production
+      - ./config.ini:/app/config.ini:ro
+      - ./tokens.ini:/app/tokens.ini
+      - ./cache:/app/cache
     restart: unless-stopped
