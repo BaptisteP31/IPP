@@ -7,7 +7,7 @@ import time
 from configparser import ConfigParser
 
 import requests
-from flask import Flask, Response, abort, jsonify, request
+from flask import Flask, abort, jsonify, request, send_file
 from webdbf import HEADERS, fetch_ics, normalize_ics
 from werkzeug.exceptions import HTTPException, InternalServerError
 
@@ -140,17 +140,16 @@ def create_app(config):
             abort(404, description=not_found)
 
         try:
-            with open(cache_path(section), 'rb') as f:
-                content = f.read()
+            age = time.time() - os.path.getmtime(cache_path(section))
+            if age > 7 * 24 * 3600:
+                log.warning('Calendar %s is older than 7 days', section)
+            response = send_file(os.path.abspath(cache_path(section)), mimetype='text/calendar',
+                                 as_attachment=True, download_name=f'{section}.ics', conditional=True)
         except FileNotFoundError:
             abort(503, description='Calendar not available yet, retry later.')
 
         log.info('Served %s to %s', section, name)
-        return Response(
-            content,
-            mimetype='text/calendar',
-            headers={'Content-Disposition': f'attachment; filename={section}.ics'}
-        )
+        return response
 
     return app
 
