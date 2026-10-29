@@ -1,0 +1,12 @@
+#!/bin/sh
+# Set the local user before installing this optional hook.
+user=''
+case "${2-}" in
+    up|connectivity-change) ;;
+    *) exit 0 ;;
+esac
+case "$user" in
+    ''|*[!a-zA-Z0-9_-]*) exit 0 ;;
+esac
+systemctl --user --machine="$user@.host" start --no-block ipp-agent.service || :
+exit 0
