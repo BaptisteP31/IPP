@@ -33,6 +33,12 @@ def refresh_all(config):
     """Fetch every calendar and replace its cached copy. Keep the old copy on error."""
     os.makedirs(CACHE_DIR, exist_ok=True)
     for section in config.sections():
+        mode = config[section].get('MODE', 'pull')
+        if mode not in ('pull', 'push'):
+            log.error('Invalid MODE for %s: %s', section, mode)
+            continue
+        if mode == 'push':
+            continue
         try:
             content = fetch_ics(config, section)
             tmp = cache_path(section) + '.tmp'
