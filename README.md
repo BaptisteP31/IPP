@@ -19,6 +19,19 @@ Vous pouvez créer autant de section que vous le souhaitez dans le fichier `conf
 
 IPP télécharge chaque calendrier une fois par heure en arrière-plan et le stocke dans `cache/`. Les requêtes des utilisateurs lisent uniquement ce cache : elles ne contactent jamais `webdbf`. Si un téléchargement échoue, IPP garde la dernière version valide.
 
+## Mode push
+
+L'école a fermé l'accès externe à webdbf. Un agent installé sur un ordinateur connecté au réseau de l'école peut envoyer les calendriers au serveur : voir [agent/README.md](agent/README.md).
+
+Dans `config.ini`, définissez `MODE = push` pour chaque section alimentée par l'agent. Aucun identifiant webdbf n'est nécessaire sur le serveur pour ces sections. Le mode par défaut reste `pull`.
+
+```bash
+python tokens.py push-add alice 1A-INFRES
+python tokens.py push-revoke alice
+```
+
+La première commande affiche un jeton et les chemins `/push/<section>`. L'agent envoie les octets ICS par `POST /push/<section>`, avec `Authorization: Bearer <jeton>` et, habituellement, `Content-Type: text/calendar`. Le corps est limité à 2 Mo. Le serveur répond 204 en cas de succès, 401 si l'accès est refusé, 409 si la section n'est pas en mode push, 400 si le calendrier est invalide et 413 si le corps est trop volumineux. Les erreurs sont au format JSON.
+
 ## Jetons d'accès
 
 Chaque personne reçoit son propre jeton. Les jetons sont stockés dans `tokens.ini` (voir `tokens.ini.example`). Ce fichier est relu à chaque requête : pas besoin de redémarrer après une modification.
