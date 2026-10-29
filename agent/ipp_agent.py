@@ -101,17 +101,27 @@ def main():
     except ValueError as exc:
         log.error('%s', exc)
         return 2
-    url = urlsplit(config[sections[0]]['LOGIN_URL'])
-    try:
-        requests.get(f'{url.scheme}://{url.netloc}/', timeout=5)
-    except (requests.ConnectionError, requests.Timeout):
-        log.info('school network not reachable, skipping')
-        return 0
-    except requests.RequestException:
-        log.error('school network check failed')
-        return 1
+    reachable = {}
     failed = False
     for section in sections:
+        url = urlsplit(config[section]['LOGIN_URL'])
+        host = (url.scheme, url.hostname, url.port)
+        if host not in reachable:
+            try:
+                response = requests.get(f'{url.scheme}://{url.netloc}/', timeout=5)
+                # A 403 at the host root is assumed to mean access is restricted to school.
+                reachable[host] = response.status_code != 403
+                if not reachable[host]:
+                    log.info('school network probe returned HTTP 403')
+            except (requests.ConnectionError, requests.Timeout):
+                reachable[host] = False
+            except requests.RequestException:
+                log.error('%s: school network check failed', section)
+                reachable[host] = False
+                failed = True
+        if not reachable[host]:
+            log.info('%s: school host not reachable, skipping', section)
+            continue
         try:
             content = fetch(config[section])
             if not args.dry_run:
