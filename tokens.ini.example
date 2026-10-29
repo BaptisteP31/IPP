@@ -5,3 +5,8 @@ SECTIONS=1A-INFRES
 [bob]
 TOKEN=remplacer-par-un-jeton-genere-avec-tokens.py
 SECTIONS=1A-INFRES, 2A-INFRES
+
+# Jeton distinct pour envoyer les calendriers
+[agent-example]
+PUSH_TOKEN = remplacer-par-un-jeton
+PUSH_SECTIONS = push-example

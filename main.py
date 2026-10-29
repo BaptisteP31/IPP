@@ -7,7 +7,7 @@ import time
 from configparser import ConfigParser
 
 import requests
-from flask import Flask, Response, abort, jsonify
+from flask import Flask, Response, abort, jsonify, request
 from webdbf import HEADERS, fetch_ics, normalize_ics
 from werkzeug.exceptions import HTTPException, InternalServerError
 
@@ -87,20 +87,21 @@ def refresh_loop(config):
         time.sleep(REFRESH_INTERVAL)
 
 
-def find_token(token):
+def find_token(token, push=False):
     """Return (name, allowed sections) for a token, or None. Re-read on every call so edits apply live."""
     tokens = ConfigParser()
     tokens.read(TOKENS_FILE)
     for name in tokens.sections():
-        stored = tokens[name].get('TOKEN', '')
+        stored = tokens[name].get('PUSH_TOKEN' if push else 'TOKEN', '')
         if stored and secrets.compare_digest(stored, token):
-            allowed = {s.strip() for s in tokens[name].get('SECTIONS', '').split(',') if s.strip()}
+            allowed = {s.strip() for s in tokens[name].get('PUSH_SECTIONS' if push else 'SECTIONS', '').split(',') if s.strip()}
             return name, allowed
     return None
 
 
 def create_app(config):
     app = Flask(__name__)
+    app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 
     @app.errorhandler(HTTPException)
     def http_error(e):
@@ -110,6 +111,22 @@ def create_app(config):
     def unexpected_error(e):
         log.exception('Unhandled error')
         return http_error(InternalServerError('Internal server error.'))
+
+    @app.route('/push/<section>', methods=['POST'])
+    def push_ics(section):
+        parts = request.headers.get('Authorization', '').split()
+        match = find_token(parts[1], push=True) if len(parts) == 2 and parts[0].lower() == 'bearer' else None
+        if match is None or section not in match[1] or section not in config:
+            abort(401, description='Push not authorized.')
+        if config[section].get('MODE', 'pull') != 'push':
+            abort(409, description='Calendar is not in push mode.')
+        content = request.get_data()
+        try:
+            store_calendar(section, content)
+        except ValueError as e:
+            abort(400, description=str(e))
+        log.info('Pushed %s by %s (%d bytes)', section, match[0], len(content))
+        return '', 204
 
     @app.route('/<token>/<section>')
     def get_ics(token, section):
