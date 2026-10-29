@@ -25,4 +25,4 @@ Modifiez la variable `user` dans `networkmanager/90-ipp-agent`, puis installez m
 
 Lancez `./uninstall.sh` ; la configuration est conservée.
 
-Si le réseau de l'école est inaccessible sur place, vérifiez la connexion et l'URL de connexion. Une erreur 401 indique un jeton incorrect ou une section non autorisée ; 409 indique que la section n'est pas en mode push ; 400 indique que le serveur a rejeté le calendrier. Contactez l'administrateur si nécessaire.
+Chaque hôte de connexion est testé une fois : les sections dont l'hôte est inaccessible sont ignorées sans erreur. Une réponse 403 au test est aussi considérée comme un accès hors du réseau de l'école. Si le réseau est inaccessible sur place, vérifiez la connexion et l'URL de connexion. Une erreur 401 indique un jeton incorrect ou une section non autorisée ; 409 indique que la section n'est pas en mode push ; 400 indique que le serveur a rejeté le calendrier. Contactez l'administrateur si nécessaire.

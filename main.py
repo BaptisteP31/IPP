@@ -8,7 +8,7 @@ from configparser import ConfigParser
 
 import requests
 from flask import Flask, abort, jsonify, request, send_file
-from webdbf import HEADERS, fetch_ics, normalize_ics
+from webdbf import fetch_ics, normalize_ics
 from werkzeug.exceptions import HTTPException, InternalServerError
 
 CONFIG_FILE = 'config.ini'
@@ -33,6 +33,7 @@ def cache_path(section):
 
 
 def store_calendar(section, content):
+    """Validate and atomically cache a calendar."""
     content = normalize_ics(content)
     if not content.startswith(b'BEGIN:VCALENDAR'):
         raise ValueError('Content is not an ICS calendar.')
