@@ -1,0 +1,11 @@
+[Unit]
+Description=Envoi périodique des calendriers IPP
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+OnStartupSec=2min
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

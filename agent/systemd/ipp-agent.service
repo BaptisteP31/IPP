@@ -1,0 +1,6 @@
+[Unit]
+Description=Envoi des calendriers IPP
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/env uv run --script %h/.local/share/ipp-agent/ipp_agent.py

@@ -1,0 +1,12 @@
+[ipp]
+# Adresse HTTPS du serveur et jeton fourni par son administrateur.
+SERVER=https://ipp.example.fr
+PUSH_TOKEN=jeton
+
+[1A-INFRES]
+# URL de connexion et URL du calendrier obtenue sur webdbf.
+LOGIN_URL=https://webdfd.mines-ales.fr/php/planning-eleves/login/login.php
+URL=https://webdfd.mines-ales.fr/planning-eleves/index.php?url=ics/promo/75
+# Identifiants de l'école.
+USERNAME=nom.prenom
+PASSWORD=motdepasse
