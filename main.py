@@ -1,6 +1,7 @@
 import logging
 import os
 import secrets
+import tempfile
 import threading
 import time
 from configparser import ConfigParser
@@ -13,6 +14,8 @@ from werkzeug.exceptions import HTTPException, InternalServerError
 CONFIG_FILE = 'config.ini'
 TOKENS_FILE = 'tokens.ini'
 CACHE_DIR = 'cache'
+MIN_CACHED_EVENTS = 10
+MIN_EVENT_RATIO = 0.5  # A half-failed login can return a nearly empty calendar.
 REFRESH_INTERVAL = 3600  # seconds between two fetches of the same calendar
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -29,6 +32,32 @@ def cache_path(section):
     return os.path.join(CACHE_DIR, f'{section}.ics')
 
 
+def store_calendar(section, content):
+    content = normalize_ics(content)
+    if not content.startswith(b'BEGIN:VCALENDAR'):
+        raise ValueError('Content is not an ICS calendar.')
+    count = content.count(b'BEGIN:VEVENT')
+    if not count:
+        raise ValueError('Calendar contains no events.')
+    try:
+        with open(cache_path(section), 'rb') as f:
+            old_count = f.read().count(b'BEGIN:VEVENT')
+    except FileNotFoundError:
+        old_count = 0
+    if old_count >= MIN_CACHED_EVENTS and count < old_count * MIN_EVENT_RATIO:
+        raise ValueError('Calendar has too few events compared with the cached copy.')
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    tmp = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=CACHE_DIR, delete=False) as f:
+            tmp = f.name
+            f.write(content)
+        os.replace(tmp, cache_path(section))
+    finally:
+        if tmp and os.path.exists(tmp):
+            os.unlink(tmp)
+
+
 def refresh_all(config):
     """Fetch every calendar and replace its cached copy. Keep the old copy on error."""
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -41,10 +70,7 @@ def refresh_all(config):
             continue
         try:
             content = fetch_ics(config, section)
-            tmp = cache_path(section) + '.tmp'
-            with open(tmp, 'wb') as f:
-                f.write(content)
-            os.replace(tmp, cache_path(section))
+            store_calendar(section, content)
         except (requests.exceptions.RequestException, ValueError, OSError) as e:
             log.error('Refresh of %s failed, keeping cached copy: %s', section, e)
             continue
