@@ -8,7 +8,7 @@ ENV HOME=/tmp
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py tokens.py entrypoint.sh ./
+COPY main.py tokens.py webdbf.py entrypoint.sh ./
 
 # Fixes ownership of the mounts as root, then drops to PUID:PGID.
 ENTRYPOINT ["/app/entrypoint.sh"]
