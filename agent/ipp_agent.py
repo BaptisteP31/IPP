@@ -76,8 +76,15 @@ def push(config, section, content):
         return
     messages = {400: 'calendar rejected', 401: 'bad token or section not allowed',
                 409: 'section is not in push mode', 413: 'calendar too large'}
-    # Do not echo server-provided text, which could contain credentials.
-    raise ValueError(f"HTTP {response.status_code}: {messages.get(response.status_code, 'server error')}")
+    message = messages.get(response.status_code, 'server error')
+    if response.status_code == 400:
+        try:
+            detail = response.json().get('message')
+            if isinstance(detail, str):
+                message += ': ' + detail.replace(config['PUSH_TOKEN'], '[redacted]')
+        except (ValueError, AttributeError):
+            pass
+    raise ValueError(f'HTTP {response.status_code}: {message}')
 
 
 def main():
@@ -113,6 +120,8 @@ def main():
         except (requests.RequestException, ValueError) as exc:
             # Request exceptions can include URLs containing sensitive values.
             message = str(exc) if isinstance(exc, ValueError) else 'network or HTTP request failed'
+            for secret in (config['ipp']['PUSH_TOKEN'], config[section]['PASSWORD']):
+                message = message.replace(secret, '[redacted]')
             log.error('%s: %s', section, message)
             failed = True
     return int(failed)
