@@ -55,14 +55,32 @@ def load_config(path):
         raise ValueError(f'invalid or missing configuration: {exc}') from exc
 
 
+class StepError(Exception):
+    def __init__(self, step, error):
+        self.step = step
+        self.error = error
+
+
+def request_step(step, operation):
+    try:
+        return operation()
+    except requests.RequestException as exc:
+        raise StepError(step, exc) from exc
+
+
+def checked_response(operation):
+    response = operation()
+    response.raise_for_status()
+    return response
+
+
 def fetch(calendar):
     with requests.Session() as session:
-        response = session.post(calendar['LOGIN_URL'], headers=HEADERS, data={
+        response = request_step('login', lambda: checked_response(lambda: session.post(calendar['LOGIN_URL'], headers=HEADERS, data={
             'Username': calendar['USERNAME'], 'Password': calendar['PASSWORD'],
-            'url': '', 'login': ''}, timeout=30)
-        response.raise_for_status()
-        response = session.get(calendar['URL'], headers=HEADERS, timeout=30)
-        response.raise_for_status()
+            'url': '', 'login': ''}, timeout=30)))
+        response = request_step('download', lambda: checked_response(
+            lambda: session.get(calendar['URL'], headers=HEADERS, timeout=30)))
         if not response.content.lstrip().startswith(b'BEGIN:VCALENDAR'):
             raise ValueError('login failed or response is not a calendar')
         return response.content
@@ -125,11 +143,23 @@ def main():
         try:
             content = fetch(config[section])
             if not args.dry_run:
-                push(config['ipp'], section, content)
+                request_step('push', lambda: push(config['ipp'], section, content))
             log.info('%s: %s', section, 'validated (dry run)' if args.dry_run else 'pushed')
-        except (requests.RequestException, ValueError) as exc:
+        except StepError as exc:
+            error = exc.error
+            if isinstance(error, requests.HTTPError) and error.response is not None:
+                detail = f'HTTP {error.response.status_code}'
+            elif isinstance(error, requests.Timeout):
+                detail = 'timeout'
+            elif isinstance(error, requests.ConnectionError):
+                detail = 'connection error'
+            else:
+                detail = 'request error'
+            log.error('%s: %s failed (%s)', section, exc.step, detail)
+            failed = True
+        except ValueError as exc:
             # Request exceptions can include URLs containing sensitive values.
-            message = str(exc) if isinstance(exc, ValueError) else 'network or HTTP request failed'
+            message = str(exc)
             for secret in (config['ipp']['PUSH_TOKEN'], config[section]['PASSWORD']):
                 message = message.replace(secret, '[redacted]')
             log.error('%s: %s', section, message)
