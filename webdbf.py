@@ -16,7 +16,6 @@ HEADERS = {
 }
 
 
-
 def fetch_ics(config, section):
     """Log in to webdbf and return the ICS content for the given section."""
     form_data = {
@@ -50,7 +49,6 @@ def normalize_ics(raw):
         text = raw.decode('utf-8')  # In case webdbf fixes its encoding one day.
     except UnicodeDecodeError:
         text = raw.decode('cp1252', errors='replace')  # Superset of Latin-1 (adds ’, €, œ...).
+    text = text.lstrip('\ufeff \t\r\n\v\f')
     text = text.replace('\r\n', '\n').replace('\n', '\r\n')
     return text.encode('utf-8')
-
-
