@@ -55,41 +55,54 @@ def load_config(path):
         raise ValueError(f'invalid or missing configuration: {exc}') from exc
 
 
-class StepError(Exception):
-    def __init__(self, step, error):
-        self.step = step
-        self.error = error
+def describe(exc):
+    """Describe a request error without its text, which can contain URLs or credentials."""
+    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+        return f'HTTP {exc.response.status_code}'
+    if isinstance(exc, requests.Timeout):
+        return 'timeout'
+    if isinstance(exc, requests.ConnectionError):
+        return 'connection error'
+    return 'request error'
 
 
-def request_step(step, operation):
+def host_reachable(url):
+    """Return whether the school host answers, i.e. whether we are on the school network."""
+    url = urlsplit(url)
     try:
-        return operation()
-    except requests.RequestException as exc:
-        raise StepError(step, exc) from exc
-
-
-def checked_response(operation):
-    response = operation()
-    response.raise_for_status()
-    return response
+        response = requests.get(f'{url.scheme}://{url.netloc}/', timeout=5)
+    except requests.RequestException:
+        return False
+    # A 403 at the host root is assumed to mean access is restricted to the school network.
+    return response.status_code != 403
 
 
 def fetch(calendar):
     with requests.Session() as session:
-        response = request_step('login', lambda: checked_response(lambda: session.post(calendar['LOGIN_URL'], headers=HEADERS, data={
-            'Username': calendar['USERNAME'], 'Password': calendar['PASSWORD'],
-            'url': '', 'login': ''}, timeout=30)))
-        response = request_step('download', lambda: checked_response(
-            lambda: session.get(calendar['URL'], headers=HEADERS, timeout=30)))
+        try:
+            response = session.post(calendar['LOGIN_URL'], headers=HEADERS, data={
+                'Username': calendar['USERNAME'], 'Password': calendar['PASSWORD'],
+                'url': '', 'login': ''}, timeout=30)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise ValueError(f'login failed ({describe(exc)})') from None
+        try:
+            response = session.get(calendar['URL'], headers=HEADERS, timeout=30)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            raise ValueError(f'download failed ({describe(exc)})') from None
         if not response.content.lstrip().startswith(b'BEGIN:VCALENDAR'):
             raise ValueError('login failed or response is not a calendar')
         return response.content
 
 
 def push(config, section, content):
-    response = requests.post(config['SERVER'].rstrip('/') + '/push/' + quote(section, safe=''),
-                             headers={'Authorization': 'Bearer ' + config['PUSH_TOKEN'],
-                                      'Content-Type': 'text/calendar'}, data=content, timeout=30)
+    try:
+        response = requests.post(config['SERVER'].rstrip('/') + '/push/' + quote(section, safe=''),
+                                 headers={'Authorization': 'Bearer ' + config['PUSH_TOKEN'],
+                                          'Content-Type': 'text/calendar'}, data=content, timeout=30)
+    except requests.RequestException as exc:
+        raise ValueError(f'push failed ({describe(exc)})') from None
     if response.status_code == 204:
         return
     messages = {400: 'calendar rejected', 401: 'bad token or section not allowed',
@@ -123,42 +136,18 @@ def main():
     failed = False
     for section in sections:
         url = urlsplit(config[section]['LOGIN_URL'])
-        host = (url.scheme, url.hostname, url.port)
+        host = (url.scheme, url.netloc)
         if host not in reachable:
-            try:
-                response = requests.get(f'{url.scheme}://{url.netloc}/', timeout=5)
-                # A 403 at the host root is assumed to mean access is restricted to school.
-                reachable[host] = response.status_code != 403
-                if not reachable[host]:
-                    log.info('school network probe returned HTTP 403')
-            except (requests.ConnectionError, requests.Timeout):
-                reachable[host] = False
-            except requests.RequestException:
-                log.error('%s: school network check failed', section)
-                reachable[host] = False
-                failed = True
+            reachable[host] = host_reachable(config[section]['LOGIN_URL'])
         if not reachable[host]:
             log.info('%s: school host not reachable, skipping', section)
             continue
         try:
             content = fetch(config[section])
             if not args.dry_run:
-                request_step('push', lambda: push(config['ipp'], section, content))
+                push(config['ipp'], section, content)
             log.info('%s: %s', section, 'validated (dry run)' if args.dry_run else 'pushed')
-        except StepError as exc:
-            error = exc.error
-            if isinstance(error, requests.HTTPError) and error.response is not None:
-                detail = f'HTTP {error.response.status_code}'
-            elif isinstance(error, requests.Timeout):
-                detail = 'timeout'
-            elif isinstance(error, requests.ConnectionError):
-                detail = 'connection error'
-            else:
-                detail = 'request error'
-            log.error('%s: %s failed (%s)', section, exc.step, detail)
-            failed = True
         except ValueError as exc:
-            # Request exceptions can include URLs containing sensitive values.
             message = str(exc)
             for secret in (config['ipp']['PUSH_TOKEN'], config[section]['PASSWORD']):
                 message = message.replace(secret, '[redacted]')
